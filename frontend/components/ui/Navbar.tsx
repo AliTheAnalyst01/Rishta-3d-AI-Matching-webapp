@@ -38,12 +38,18 @@ export default function Navbar() {
     pathname === href || (href !== '/' && pathname.startsWith(href + '/'))
 
   /* ── Styles ── */
+  const isHome = pathname === '/'
+
   const headerStyle: React.CSSProperties = {
     position: 'fixed',
     top: 0, left: 0, right: 0,
     zIndex: 100,
-    background: scrolled ? 'rgba(253,248,242,0.95)' : 'transparent',
-    backdropFilter: scrolled ? 'blur(12px)' : 'none',
+    background: scrolled
+      ? 'rgba(253,248,242,0.95)'
+      : isHome
+        ? 'transparent'
+        : 'rgba(253,248,242,0.92)',
+    backdropFilter: scrolled ? 'blur(12px)' : (isHome ? 'none' : 'blur(8px)'),
     borderBottom: scrolled ? '1px solid var(--border)' : '1px solid transparent',
     transition: 'all 0.3s ease',
   }
@@ -82,7 +88,7 @@ export default function Navbar() {
   const logoTextStyle: React.CSSProperties = {
     fontFamily: 'var(--font-serif), Playfair Display, Georgia, serif',
     fontSize: 18, fontWeight: 600,
-    color: scrolled ? 'var(--text)' : (pathname === '/' ? '#fff' : 'var(--text)'),
+    color: (!scrolled && isHome) ? '#fff' : 'var(--text)',
     letterSpacing: '-0.02em',
     whiteSpace: 'nowrap',
   }
@@ -99,7 +105,11 @@ export default function Navbar() {
     borderRadius: 10,
     fontSize: 13.5,
     fontWeight: active ? 600 : 500,
-    color: active ? 'var(--rose-dark)' : (scrolled ? 'var(--slate)' : (pathname === '/' ? 'rgba(255,255,255,0.85)' : 'var(--slate)')),
+    color: active
+      ? 'var(--rose-dark)'
+      : (!scrolled && isHome)
+        ? 'rgba(255,255,255,0.85)'
+        : 'var(--text)',
     background: active ? 'var(--rose-pale)' : 'transparent',
     textDecoration: 'none',
     transition: 'all 0.15s',
@@ -122,9 +132,9 @@ export default function Navbar() {
     borderRadius: 10,
     fontSize: 13,
     fontWeight: 500,
-    color: scrolled ? 'var(--text)' : (pathname === '/' ? '#fff' : 'var(--text)'),
+    color: (!scrolled && isHome) ? '#fff' : 'var(--text)',
     background: 'transparent',
-    border: `1.5px solid ${scrolled ? 'var(--border)' : (pathname === '/' ? 'rgba(255,255,255,0.4)' : 'var(--border)')}`,
+    border: `1.5px solid ${(!scrolled && isHome) ? 'rgba(255,255,255,0.4)' : 'var(--border)'}`,
     textDecoration: 'none',
     cursor: 'pointer',
     transition: 'all 0.15s',
