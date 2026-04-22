@@ -1,75 +1,53 @@
-'use client'
+import Image from 'next/image'
 import { gDriveThumb } from '@/lib/gdrive'
 
-interface Props {
-  photoUrl?: string | null
-  name?: string | null
-  gender?: string | null
-  size?: number
+interface ProfilePhotoProps {
+  photoUrl: string | null | undefined
+  name: string | null | undefined
+  gender: string | null | undefined
   className?: string
+  size?: number
 }
 
-export default function ProfilePhoto({ photoUrl, name, gender, className = '' }: Props) {
-  const thumbUrl = gDriveThumb(photoUrl)
-  const initial = name?.[0]?.toUpperCase() || (gender === 'Female' ? '♀' : '♂')
+export default function ProfilePhoto({
+  photoUrl,
+  name,
+  gender,
+  className = '',
+  size = 400,
+}: ProfilePhotoProps) {
+  const src = gDriveThumb(photoUrl, size) ?? photoUrl
+
+  if (src) {
+    return (
+      <Image
+        src={src}
+        alt={name ? `${name[0]}*** profile photo` : 'Profile photo'}
+        fill
+        sizes="(max-width: 768px) 100vw, 50vw"
+        className={`object-cover object-top ${className}`}
+        unoptimized={src.includes('drive.google.com')}
+      />
+    )
+  }
+
+  /* Placeholder */
+  const initials = name ? name[0].toUpperCase() : (gender === 'Female' ? '♀' : '♂')
+  const bg = gender === 'Female'
+    ? 'linear-gradient(135deg, oklch(88% 0.06 10), oklch(93% 0.04 10))'
+    : 'linear-gradient(135deg, oklch(88% 0.05 240), oklch(93% 0.03 240))'
 
   return (
     <div
-      className={`relative w-full h-full ${className}`}
-      style={{
-        background: 'linear-gradient(160deg, #1e1208 0%, #0d0705 100%)',
-      }}
+      className={`absolute inset-0 flex items-center justify-center ${className}`}
+      style={{ background: bg }}
     >
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(212,167,87,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(212,167,87,0.06) 1px, transparent 1px)',
-          backgroundSize: '28px 28px',
-        }}
-      />
-
-      {thumbUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={thumbUrl}
-          alt={name || 'Profile'}
-          className="absolute inset-0 w-full h-full object-cover"
-          loading="lazy"
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = 'none'
-          }}
-        />
-      )}
-
-      {!thumbUrl && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-          <div
-            className="flex items-center justify-center rounded-full text-4xl font-serif"
-            style={{
-              width: '96px',
-              height: '96px',
-              background: 'rgba(212,167,87,0.07)',
-              border: '1px solid rgba(212,167,87,0.2)',
-              color: '#d4a757',
-              boxShadow: '0 0 24px rgba(212,167,87,0.08)',
-            }}
-          >
-            {initial}
-          </div>
-          <span
-            className="text-[10px] tracking-[0.2em] uppercase"
-            style={{ color: 'rgba(200,170,128,0.3)' }}
-          >
-            Photo on request
-          </span>
-        </div>
-      )}
-
-      <div
-        className="absolute bottom-0 left-0 right-0 h-24 pointer-events-none"
-        style={{ background: 'linear-gradient(to top, rgba(10,6,3,0.95) 0%, transparent 100%)' }}
-      />
+      <span
+        className="font-serif select-none"
+        style={{ fontSize: 'clamp(40px, 30%, 80px)', color: 'var(--mist)', opacity: 0.5 }}
+      >
+        {initials}
+      </span>
     </div>
   )
 }

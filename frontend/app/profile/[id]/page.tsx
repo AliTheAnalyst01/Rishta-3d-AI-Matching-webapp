@@ -1,253 +1,207 @@
 import { notFound } from 'next/navigation'
-import { formatIncome, formatHeight } from '@/lib/gdrive'
-import { getProfile } from '@/lib/api'
 import Link from 'next/link'
-import ProfilePhoto from '@/components/ui/ProfilePhoto'
+import Image from 'next/image'
+import { getProfile, Profile } from '@/lib/api'
+import { formatIncome, formatHeight, gDriveThumb } from '@/lib/gdrive'
 
-interface PageProps {
-  params: { id: string }
-}
+interface Props { params: { id: string } }
 
-export default async function ProfileDetailPage({ params }: PageProps) {
-  let p
+export default async function ProfileDetailPage({ params }: Props) {
+  let profile: Profile
   try {
-    p = await getProfile(parseInt(params.id, 10))
+    profile = await getProfile(Number(params.id))
   } catch {
-    p = null
+    notFound()
   }
-  
-  if (!p) notFound()
 
-  const displayName = p.name ? `${p.name[0]}***` : 'Anonymous'
-  const atAGlance = [
-    p.age ? `${p.age} years` : null,
-    p.city || null,
-    p.education || null,
-    p.profession || null,
-    p.sect || null,
-    p.marital_status || null,
-  ].filter(Boolean)
-  const quickFacts = [
-    { label: 'Age', value: p.age ? `${p.age} years` : null },
-    { label: 'Gender', value: p.gender || null },
-    { label: 'City', value: p.city || null },
-    { label: 'Sect', value: p.sect || null },
-    { label: 'Marital', value: p.marital_status || null },
-    { label: 'Education', value: p.education || null },
-  ].filter((item) => item.value)
+  const displayName = profile.name ? `${profile.name[0]}***` : 'Anonymous'
+  const photoSrc = gDriveThumb(profile.photo_url, 800) ?? profile.photo_url
+
+  const catColor: Record<string, string> = {
+    Premium: 'chip-rose', Elite: 'chip-gold', Syed: 'chip-purple',
+  }
+  const catClass   = catColor[profile.category ?? ''] ?? 'chip-stone'
+  const sectClass  = profile.sect?.toLowerCase() === 'shia' ? 'chip-purple' : 'chip-rose'
+
+  const infoRows = [
+    { label: 'Education',      value: profile.education },
+    { label: 'Profession',     value: profile.profession },
+    { label: 'Income',         value: formatIncome(profile.income) },
+    { label: 'City',           value: profile.city },
+    { label: 'Country',        value: profile.country },
+    { label: 'Marital Status', value: profile.marital_status },
+    { label: 'Height',         value: formatHeight(profile.height_cm) },
+    { label: 'Caste',          value: profile.caste },
+    { label: 'Family Status',  value: profile.family_status },
+    { label: 'Nationality',    value: profile.nationality },
+  ].filter(r => r.value)
 
   return (
-    <div className="min-h-screen pb-20">
-      {/* Header */}
-      <div className="border-b border-base py-8">
-        <div className="app-container max-w-5xl">
-          <Link href="/browse" className="btn-link mb-6">
-            Back to Browse
-          </Link>
-          <p className="text-xs text-muted uppercase tracking-widest mb-1">Registration No.</p>
-          <h1 className="text-3xl font-serif">{p.reg_no}</h1>
-        </div>
-      </div>
-
+    <div className="pt-20">
       <div className="app-container max-w-5xl py-8">
-        <div className="grid lg:grid-cols-[300px_1fr] gap-8">
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Photo */}
-            <div className="card aspect-[3/4] overflow-hidden">
-              <ProfilePhoto photoUrl={p.photo_url} name={p.name} gender={p.gender} />
-            </div>
+        {/* Back */}
+        <Link href="/browse"
+          className="inline-flex items-center gap-2 text-sm text-muted mb-6 hover:text-rose transition-colors">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <path d="M19 12H5m5 5-5-5 5-5" />
+          </svg>
+          Back to Browse
+        </Link>
 
-            <div className="card p-6">
-              <h3 className="text-xs uppercase tracking-widest text-gold-400 mb-3">Request Introduction</h3>
-              <p className="text-sm text-muted mb-4">
-                Send this profile to our team for family-level introduction. We review requests for safety before sharing details.
-              </p>
-              <div className="space-y-2">
-                <button className="btn-primary w-full">Request Family Introduction</button>
-                <button className="btn-secondary w-full">Save for Family Review</button>
-              </div>
-              <p className="text-xs text-muted mt-3">Expected response within 24-48 hours.</p>
-            </div>
-            <div className="card p-5">
-              <h3 className="text-xs uppercase tracking-widest text-gold-400 mb-3">Verification</h3>
-              <div className="space-y-2 text-sm text-muted">
-                <p className="flex items-start gap-2"><span className="text-green-400">✓</span><span>Reviewed by moderation team</span></p>
-                <p className="flex items-start gap-2"><span className="text-green-400">✓</span><span>Contact details hidden by default</span></p>
-                <p className="flex items-start gap-2"><span className="text-green-400">✓</span><span>Photo sharing controlled by request</span></p>
-              </div>
-            </div>
+        <div className="grid md:grid-cols-[340px_1fr] gap-8 items-start">
 
-            {/* Badges */}
-            <div className="flex flex-wrap gap-2">
-              {p.sect && (
-                <span className={`badge ${p.sect === 'Shia' ? 'bg-violet-600/20 border-violet-500/30 text-violet-400' : 'bg-blue-600/20 border-blue-500/30 text-blue-400'}`}>
-                  {p.sect}
-                </span>
+          {/* ── Left: Photo + actions ── */}
+          <div className="space-y-4">
+            <div className="card overflow-hidden rounded-3xl" style={{ aspectRatio: '4/5', position: 'relative' }}>
+              {photoSrc ? (
+                <Image
+                  src={photoSrc}
+                  alt={`${displayName} profile`}
+                  fill
+                  sizes="340px"
+                  className="object-cover object-top"
+                  unoptimized={photoSrc.includes('drive.google.com')}
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center"
+                  style={{ background: 'var(--cream)' }}>
+                  <span className="font-serif text-8xl text-muted opacity-30">
+                    {profile.gender === 'Female' ? '♀' : '♂'}
+                  </span>
+                </div>
               )}
-              {p.category && <span className="badge">{p.category}</span>}
-              {p.marital_status && <span className="badge bg-mist/10 border-mist/20 text-mist">{p.marital_status}</span>}
+
+              {/* Overlay badges */}
+              <div className="absolute top-4 left-4 right-4 flex justify-between">
+                {profile.sect     && <span className={`chip ${sectClass}`}>{profile.sect}</span>}
+                {profile.category && <span className={`chip ${catClass}`}>{profile.category}</span>}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <ProposalButton profileId={profile.id} />
+
+            <button className="btn-muted w-full justify-center py-3 text-sm">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <rect x="5" y="10" width="14" height="11" rx="3" />
+                <path d="M8 10V7a4 4 0 018 0v3" strokeLinecap="round" />
+              </svg>
+              Request Full Details
+            </button>
+
+            {/* Privacy notice */}
+            <div className="rounded-xl p-4 text-xs leading-relaxed"
+              style={{ background: 'var(--gold-pale)', border: '1.5px solid oklch(87% 0.08 75)', color: 'oklch(38% 0.12 75)' }}>
+              <strong className="block mb-1">Privacy Protected</strong>
+              Full name, contact, and photos shared only after mutual interest through our secure family introduction channel.
             </div>
           </div>
 
-          {/* Main Content */}
-          <div className="space-y-6">
-            {/* Basic Info */}
-            <div className="card p-6">
-              <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
-                <div>
-                  <p className="text-xs uppercase tracking-widest text-muted mb-1">Profile Snapshot</p>
-                  <h2 className="text-2xl font-serif text-parchment">{displayName}</h2>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs uppercase tracking-widest text-muted">Privacy Safe Name</p>
-                  <p className="text-sm text-sand/80">Full details shown after introduction request</p>
-                </div>
+          {/* ── Right: Profile info ── */}
+          <div>
+            {/* Header */}
+            <div className="mb-6">
+              <h1 className="font-serif text-4xl font-semibold mb-2">{displayName}</h1>
+              <div className="flex flex-wrap items-center gap-3 text-sm text-muted mb-4">
+                {profile.age  && <span className="font-semibold text-base" style={{ color: 'var(--charcoal)' }}>{profile.age} years</span>}
+                {profile.city && <span>· {profile.city}</span>}
+                <span className="font-mono text-xs opacity-60">#{profile.reg_no}</span>
               </div>
-              {atAGlance.length > 0 && (
-                <div className="mb-4">
-                  <p className="text-xs uppercase tracking-widest text-gold-400 mb-2">At a glance</p>
-                  <div className="flex flex-wrap gap-2">
-                    {atAGlance.slice(0, 6).map((item) => (
-                      <span key={item} className="badge">{item}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
               <div className="flex flex-wrap gap-2">
-                {p.age && <span className="badge">{p.age} years old</span>}
-                {p.gender && <span className="badge">{p.gender}</span>}
-                {p.caste && <span className="badge bg-mist/10 border-mist/20 text-mist">{p.caste}</span>}
+                <span className="chip chip-green">✓ Verified</span>
+                <span className="chip chip-stone">Private Profile</span>
+                {profile.marital_status && (
+                  <span className="chip chip-stone">{profile.marital_status}</span>
+                )}
               </div>
-              {quickFacts.length > 0 && (
-                <div className="grid sm:grid-cols-3 gap-3 mt-5">
-                  {quickFacts.map((fact) => (
-                    <div key={fact.label} className="bg-surface rounded-xl p-3 border border-base">
-                      <p className="text-[11px] uppercase tracking-widest text-sand/95">{fact.label}</p>
-                      <p className="text-sm text-gold-300 mt-1">{fact.value}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
 
-            {/* Location & Background */}
-            <details className="card p-6" open>
-              <summary className="cursor-pointer list-none flex items-center justify-between">
-                <h3 className="text-xs uppercase tracking-widest text-gold-400">Location & Background</h3>
-                <span className="text-xs text-muted">Expand/Collapse</span>
-              </summary>
-              <div className="grid sm:grid-cols-2 gap-4">
-                {p.city && (
-                  <div className="bg-surface rounded-xl p-4">
-                    <p className="text-xs text-sand/95 mb-1">City</p>
-                    <p className="text-gold-300">{p.city}</p>
-                  </div>
-                )}
-                {p.country && (
-                  <div className="bg-surface rounded-xl p-4">
-                    <p className="text-xs text-sand/95 mb-1">Country</p>
-                    <p className="text-gold-300">{p.country}</p>
-                  </div>
-                )}
-                {p.nationality && (
-                  <div className="bg-surface rounded-xl p-4">
-                    <p className="text-xs text-sand/95 mb-1">Nationality</p>
-                    <p className="text-gold-300">{p.nationality}</p>
-                  </div>
-                )}
-                {p.family_status && (
-                  <div className="bg-surface rounded-xl p-4">
-                    <p className="text-xs text-sand/95 mb-1">Family Status</p>
-                    <p className="text-gold-300">{p.family_status}</p>
-                  </div>
-                )}
-                {p.no_of_kids != null && p.no_of_kids > 0 && (
-                  <div className="bg-surface rounded-xl p-4">
-                    <p className="text-xs text-sand/95 mb-1">Children</p>
-                    <p className="text-gold-300">{p.no_of_kids}</p>
-                  </div>
-                )}
+            {/* About / Requirements */}
+            {profile.requirements && (
+              <div className="card p-6 mb-6">
+                <h2 className="font-serif text-lg font-semibold mb-3">Partner Requirements</h2>
+                <p className="text-sm leading-relaxed text-muted">{profile.requirements}</p>
               </div>
-            </details>
+            )}
 
-            {/* Education & Career */}
-            <details className="card p-6" open>
-              <summary className="cursor-pointer list-none flex items-center justify-between">
-                <h3 className="text-xs uppercase tracking-widest text-gold-400">Education & Career</h3>
-                <span className="text-xs text-muted">Expand/Collapse</span>
-              </summary>
-              <div className="grid sm:grid-cols-2 gap-4">
-                {p.education && (
-                  <div className="bg-surface rounded-xl p-4">
-                    <p className="text-xs text-sand/95 mb-1">Education</p>
-                    <p className="text-gold-300">{p.education}</p>
-                  </div>
-                )}
-                {p.profession && (
-                  <div className="bg-surface rounded-xl p-4">
-                    <p className="text-xs text-sand/95 mb-1">Profession</p>
-                    <p className="text-gold-300">{p.profession}</p>
-                  </div>
-                )}
-                {p.income && (
-                  <div className="bg-surface rounded-xl p-4">
-                    <p className="text-xs text-sand/95 mb-1">Income</p>
-                    <p className="text-gold-300">{formatIncome(p.income)}</p>
-                  </div>
-                )}
+            {/* Info table */}
+            <div className="card overflow-hidden mb-6">
+              <div className="px-6 py-4 border-b border-base">
+                <h2 className="font-serif text-lg font-semibold">Profile Details</h2>
               </div>
-            </details>
+              <div className="divide-y divide-base">
+                {infoRows.map(row => (
+                  <div key={row.label} className="flex items-center px-6 py-3.5">
+                    <span className="text-sm text-muted w-36 shrink-0">{row.label}</span>
+                    <span className="text-sm font-medium">{row.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-            {/* Physical Profile */}
-            {(p.height_cm || p.weight_kg || p.complexion || p.body_type) && (
-              <details className="card p-6" open>
-                <summary className="cursor-pointer list-none flex items-center justify-between">
-                  <h3 className="text-xs uppercase tracking-widest text-gold-400">Physical Profile</h3>
-                  <span className="text-xs text-muted">Expand/Collapse</span>
-                </summary>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {p.height_cm && (
-                    <div className="bg-surface rounded-xl p-4">
-                      <p className="text-xs text-sand/95 mb-1">Height</p>
-                      <p className="text-gold-300">{formatHeight(p.height_cm)}</p>
-                    </div>
-                  )}
-                  {p.weight_kg && (
-                    <div className="bg-surface rounded-xl p-4">
-                      <p className="text-xs text-sand/95 mb-1">Weight</p>
-                      <p className="text-gold-300">{p.weight_kg} kg</p>
-                    </div>
-                  )}
-                  {p.complexion && (
-                    <div className="bg-surface rounded-xl p-4">
-                      <p className="text-xs text-sand/95 mb-1">Complexion</p>
-                      <p className="text-gold-300">{p.complexion}</p>
-                    </div>
-                  )}
-                  {p.body_type && (
-                    <div className="bg-surface rounded-xl p-4">
-                      <p className="text-xs text-sand/95 mb-1">Body Type</p>
-                      <p className="text-gold-300">{p.body_type}</p>
-                    </div>
-                  )}
+            {/* Physical (if available) */}
+            {(profile.height_cm || profile.weight_kg || profile.complexion || profile.body_type) && (
+              <div className="card p-6 mb-6">
+                <h2 className="font-serif text-lg font-semibold mb-4">Physical Details</h2>
+                <div className="grid grid-cols-2 gap-4">
+                  {profile.height_cm  && <Detail label="Height"     value={formatHeight(profile.height_cm) ?? ''} />}
+                  {profile.weight_kg  && <Detail label="Weight"     value={`${profile.weight_kg} kg`} />}
+                  {profile.complexion && <Detail label="Complexion" value={profile.complexion} />}
+                  {profile.body_type  && <Detail label="Body Type"  value={profile.body_type} />}
                 </div>
-              </details>
+              </div>
             )}
 
-            {/* Partner Requirements */}
-            {p.requirements && (
-              <details className="card p-6" open>
-                <summary className="cursor-pointer list-none flex items-center justify-between">
-                  <h3 className="text-xs uppercase tracking-widest text-gold-400">Partner Preferences</h3>
-                  <span className="text-xs text-muted">Expand/Collapse</span>
-                </summary>
-                <p className="text-sand/70 leading-relaxed">{p.requirements}</p>
-              </details>
-            )}
+            {/* CTA */}
+            <div className="card p-6" style={{ background: 'var(--rose-pale)', borderColor: 'oklch(85% 0.06 10)' }}>
+              <h3 className="font-serif text-lg font-semibold mb-2">Interested in this Profile?</h3>
+              <p className="text-sm text-muted mb-4 leading-relaxed">
+                Send a proposal and our team will facilitate a respectful family introduction.
+              </p>
+              <ProposalButton profileId={profile.id} large />
+            </div>
           </div>
         </div>
       </div>
+      <div className="h-16 md:h-0" />
     </div>
+  )
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs text-muted mb-0.5">{label}</p>
+      <p className="text-sm font-semibold">{value}</p>
+    </div>
+  )
+}
+
+/* Client-side proposal button — needs state */
+'use client'
+function ProposalButton({ profileId, large = false }: { profileId: number; large?: boolean }) {
+  // Simple local state — real implementation would POST to backend
+  const [sent, setSent] = (typeof window !== 'undefined' ? require('react') : { useState: (v: boolean) => [v, () => {}] }).useState(false)
+  if (sent) {
+    return (
+      <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold"
+        style={{ background: 'var(--green-pale)', color: 'oklch(36% 0.16 145)', border: '1.5px solid oklch(86% 0.08 145)' }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 6L9 17l-5-5" />
+        </svg>
+        Proposal Sent — we will be in touch
+      </div>
+    )
+  }
+  return (
+    <button
+      onClick={() => setSent(true)}
+      className={`btn-primary w-full justify-center ${large ? 'py-3.5 text-base' : 'py-2.5 text-sm'}`}
+    >
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round">
+        <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+      </svg>
+      Send Proposal
+    </button>
   )
 }

@@ -1,414 +1,227 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
-import ProfilePhoto from '@/components/ui/ProfilePhoto'
-import { getMatchHealth, getMatchScores } from '@/lib/api'
+import ProfileCard from '@/components/ui/ProfileCard'
+import { getMatchScores, MatchResult, ProfileSummary } from '@/lib/api'
 
-interface MatchRequest {
-  seeking_gender?: string
-  min_age?: number
-  max_age?: number
-  sect?: string
-  caste?: string
-  city?: string
-  education_level?: string
-  profession?: string
-  category?: string
+type Step = {
+  key: keyof MatchRequest
+  label: string
+  options: string[]
 }
 
-const inputStyles = 'input'
-const selectStyles = 'select-field'
+interface MatchRequest {
+  lookingFor: string
+  minAge: string
+  maxAge: string
+  sect: string
+  city: string
+  education: string
+  values: string
+}
+
+const STEPS: Step[] = [
+  { key: 'lookingFor', label: 'I am looking for a…',         options: ['Bride (Female)', 'Groom (Male)'] },
+  { key: 'minAge',     label: 'Minimum age preference',      options: ['20','22','24','26','28','30','32'] },
+  { key: 'maxAge',     label: 'Maximum age preference',      options: ['25','28','30','32','35','38','40'] },
+  { key: 'sect',       label: 'Preferred sect',              options: ['Any Sect', 'Sunni', 'Shia'] },
+  { key: 'city',       label: 'Preferred city',              options: ['Any City','Lahore','Karachi','Islamabad','Rawalpindi','Peshawar','Dubai','London'] },
+  { key: 'education',  label: 'Minimum education level',     options: ['Any','Bachelor\'s Degree','Master\'s Degree','Medical Degree (MBBS/BDS)','PhD / Doctorate'] },
+  { key: 'values',     label: 'Most important value in a partner', options: ['Strong Faith & Deen','Family Orientation','Career & Ambition','Education Level','Personality Compatibility'] },
+]
+
+function toMatchPayload(a: Partial<MatchRequest>) {
+  const educMap: Record<string, string> = {
+    "Bachelor's Degree": 'bachelor',
+    "Master's Degree":   'master',
+    "Medical Degree (MBBS/BDS)": 'MBBS',
+    "PhD / Doctorate":   'PhD',
+  }
+  return {
+    seeking_gender: a.lookingFor?.includes('Bride') ? 'Female' : 'Male',
+    min_age:  a.minAge  ? Number(a.minAge)  : undefined,
+    max_age:  a.maxAge  ? Number(a.maxAge)  : undefined,
+    sect:     a.sect && a.sect !== 'Any Sect' ? a.sect : undefined,
+    city:     a.city && a.city !== 'Any City' ? a.city : undefined,
+    education_level: a.education && a.education !== 'Any' ? educMap[a.education] ?? a.education : undefined,
+  }
+}
+
+// Convert MatchResult → ProfileSummary shape for ProfileCard
+function toSummary(m: MatchResult): ProfileSummary {
+  return {
+    id:         m.profile_id,
+    reg_no:     m.reg_no ?? '',
+    name:       m.name,
+    gender:     m.gender,
+    sect:       m.sect,
+    age:        m.age,
+    city:       m.city,
+    education:  m.education,
+    profession: m.profession,
+    income:     m.income,
+    category:   m.category,
+    photo_url:  m.photo_url,
+  }
+}
 
 export default function MatchPage() {
-  const [loading, setLoading] = useState(false)
-  const [results, setResults] = useState<any[]>([])
-  const [error, setError] = useState<string | null>(null)
-  const [request, setRequest] = useState<MatchRequest>({})
-  const [submitted, setSubmitted] = useState(false)
-  const [candidatesConsidered, setCandidatesConsidered] = useState(0)
-  const [aiAvailable, setAiAvailable] = useState<boolean | null>(null)
+  const [step, setStep]       = useState(0)
+  const [answers, setAnswers] = useState<Partial<MatchRequest>>({})
+  const [status, setStatus]   = useState<'idle'|'loading'|'results'|'error'>('idle')
+  const [results, setResults] = useState<MatchResult[]>([])
+  const [considered, setConsidered] = useState(0)
+  const [errorMsg, setErrorMsg] = useState('')
 
-  useEffect(() => {
-    checkAiHealth()
-  }, [])
+  const handleAnswer = async (key: keyof MatchRequest, val: string) => {
+    const next = { ...answers, [key]: val }
+    setAnswers(next)
 
-  async function checkAiHealth() {
-    try {
-      const data = await getMatchHealth()
-      setAiAvailable(data.status === 'healthy')
-    } catch {
-      setAiAvailable(false)
+    if (step < STEPS.length - 1) {
+      setTimeout(() => setStep(s => s + 1), 300)
+    } else {
+      // Last step — run match
+      setStatus('loading')
+      try {
+        const payload = toMatchPayload(next)
+        const data = await getMatchScores(payload)
+        setResults(data.matches)
+        setConsidered(data.candidates_considered)
+        setStatus('results')
+      } catch (e: any) {
+        setErrorMsg(e?.message ?? 'AI matching failed. Please try again.')
+        setStatus('error')
+      }
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-    setSubmitted(true)
-
-    try {
-      const data = await getMatchScores(request)
-      setResults(data.matches || [])
-      setCandidatesConsidered(data.candidates_considered || 0)
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+  const reset = () => {
+    setStep(0); setAnswers({}); setStatus('idle'); setResults([]); setErrorMsg('')
   }
 
-  function set(field: keyof MatchRequest, val: any) {
-    setRequest(r => ({ ...r, [field]: val || undefined }))
-  }
-
-  return (
-    <div className="min-h-screen pb-20">
-      <div className="app-container py-8 md:py-10">
-        <div className="mb-8 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-4 bg-gold/10 border border-gold/20 text-gold-500 text-sm">
-            AI-Powered Matching
-          </div>
-          <h1 className="text-4xl md:text-5xl font-serif font-light mb-3 text-parchment">
-            Find Your Perfect Match
-          </h1>
-          <p className="max-w-xl mx-auto text-base leading-relaxed text-sand/80">
-            Tell us your preferences and our local AI will rank the most compatible profiles.
-          </p>
-          <p className="text-xs text-muted mt-3">Score is based on profile compatibility signals, not human chemistry.</p>
-          <div className="mt-4 flex flex-wrap justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setRequest({})
-                setResults([])
-                setSubmitted(false)
-                setError(null)
-              }}
-              className="btn-secondary"
-            >
-              Reset Preferences
-            </button>
-            <Link href="/browse" className="btn-service">Browse Profiles</Link>
-          </div>
-          {aiAvailable === false && (
-            <p className="mt-3 text-sm text-red-400">AI service is currently unavailable. Please check Ollama and try again.</p>
-          )}
-        </div>
-
-
-        <div className="grid xl:grid-cols-[420px_1fr] gap-6 lg:gap-8 items-start">
-
-          <div className="card rounded-2xl overflow-hidden">
-            <div className="px-6 py-5 border-b border-base">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-gold/10 border border-gold/30">
-                  <span className="text-xs font-semibold text-gold-500">AI</span>
-                </div>
-                <div>
-                  <h2 className="font-serif font-semibold text-parchment">Your Preferences</h2>
-                  <p className="text-xs text-muted">Set filters and generate ranked matches</p>
-                </div>
-              </div>
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-6 space-y-5">
-              {/* Primary Selection */}
-              <div>
-                <label className="block text-xs uppercase tracking-wider mb-3 text-muted">
-                  I&apos;m Looking For
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => set('seeking_gender', request.seeking_gender === 'Male' ? undefined : 'Male')}
-                    className={`py-3 px-4 rounded-xl text-sm font-medium transition-all border ${request.seeking_gender === 'Male' ? 'bg-gold-400 text-void border-gold-400' : 'bg-panel border-base text-muted'}`}
-                  >
-                    Male
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => set('seeking_gender', request.seeking_gender === 'Female' ? undefined : 'Female')}
-                    className={`py-3 px-4 rounded-xl text-sm font-medium transition-all border ${request.seeking_gender === 'Female' ? 'bg-gold-400 text-void border-gold-400' : 'bg-panel border-base text-muted'}`}
-                  >
-                    Female
-                  </button>
-                </div>
-              </div>
-
-              {/* Sect & Age Range */}
-              <div className="grid sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs uppercase tracking-wider mb-2 text-muted">
-                    Sect
-                  </label>
-                  <select value={request.sect || ''} onChange={e => set('sect', e.target.value)} className={selectStyles}>
-                    <option value="">Any</option>
-                    <option value="Shia">Shia</option>
-                    <option value="Sunni">Sunni</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs uppercase tracking-wider mb-2 text-muted">
-                    Category
-                  </label>
-                  <select value={request.category || ''} onChange={e => set('category', e.target.value)} className={selectStyles}>
-                    <option value="">Any</option>
-                    <option value="Syed">Syed</option>
-                    <option value="Doctor">Doctor</option>
-                    <option value="2ndMarriage">2nd Marriage</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Age Range */}
-              <div>
-                <label className="block text-xs uppercase tracking-wider mb-2 text-muted">
-                  Preferred Age Range
-                </label>
-                <div className="grid sm:grid-cols-2 gap-3">
-                  <input
-                    type="number"
-                    value={request.min_age || ''}
-                    onChange={e => set('min_age', e.target.value ? Number(e.target.value) : undefined)}
-                    min="18" max="80"
-                    placeholder="Min Age"
-                    className={inputStyles}
-                  />
-                  <input
-                    type="number"
-                    value={request.max_age || ''}
-                    onChange={e => set('max_age', e.target.value ? Number(e.target.value) : undefined)}
-                    min="18" max="80"
-                    placeholder="Max Age"
-                    className={inputStyles}
-                  />
-                </div>
-              </div>
-
-              {/* Location & Education */}
-              {[
-                { label: 'City Preference', field: 'city' as const, placeholder: 'e.g., Karachi, Lahore' },
-                { label: 'Education Level', field: 'education_level' as const, placeholder: 'e.g., Doctor, Graduate, MBA' },
-              ].map(({ label, field, placeholder }) => (
-                <div key={field}>
-                  <label className="block text-xs uppercase tracking-wider mb-2 text-muted">
-                    {label}
-                  </label>
-                  <input
-                    type="text"
-                    value={request[field] || ''}
-                    onChange={e => set(field, e.target.value)}
-                    placeholder={placeholder}
-                    className={inputStyles}
-                  />
-                </div>
-              ))}
-
-              {/* Optional Caste */}
-              <div>
-                <label className="block text-xs uppercase tracking-wider mb-2 text-muted">
-                  Caste (Optional)
-                </label>
-                <input 
-                  type="text" 
-                  value={request.caste || ''} 
-                  onChange={e => set('caste', e.target.value)} 
-                  placeholder="e.g., Syed, Rajput"
-                  className={inputStyles}
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="btn-primary w-full py-4 text-base mt-4"
-              >
-                {loading ? 'Finding matches...' : 'Find Best Matches'}
-              </button>
-
-              <p className="text-center text-xs text-muted">
-                We&apos;ll analyze {candidatesConsidered || 'thousands of'} profiles to find your best matches
-              </p>
-            </form>
-          </div>
-
-          <div className="min-h-[400px]">
-            {!submitted && (
-              <div className="flex flex-col items-center justify-center py-24 text-center">
-                <div className="w-28 h-28 rounded-full flex items-center justify-center mb-6 bg-gold/10 border border-gold/20">
-                  <span className="text-sm uppercase tracking-wider text-gold-500">Ready</span>
-                </div>
-                <p className="font-serif text-2xl mb-2 text-muted">
-                  Your matches await
-                </p>
-                <p className="text-sm max-w-sm text-muted">
-                  Fill in your preferences and let our intelligent system find the most compatible profiles for you.
-                </p>
-              </div>
-            )}
-
-            {loading && submitted && results.length === 0 && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-center py-16">
-                  <div className="text-center">
-                    <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center bg-gold/10">
-                      <span className="animate-pulse text-xs text-gold-500">AI</span>
-                    </div>
-                    <p className="font-serif text-lg text-parchment">
-                      Finding your matches...
-                    </p>
-                    <p className="text-sm mt-1 text-muted">
-                      Analyzing compatibility scores
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {error && (
-              <div className="card p-6 rounded-2xl">
-                <div className="flex items-start gap-3 mb-4">
-                  <div>
-                    <p className="font-serif font-semibold text-parchment">
-                      {error.includes('No profiles') || error.includes('candidates')
-                        ? 'Too few profiles match these filters'
-                        : 'Something went wrong'}
-                    </p>
-                    <p className="text-sm mt-1 text-muted">
-                      {error.includes('No profiles') || error.includes('candidates')
-                        ? 'Try removing the age range or sect filter to expand the candidate pool.'
-                        : error}
-                    </p>
-                  </div>
-                </div>
-                {(error.includes('No profiles') || error.includes('candidates')) && (
-                  <div className="flex flex-wrap gap-2">
-                    {['Remove age range', 'Try any sect', 'Try any gender'].map(tip => (
-                      <span key={tip} className="trust-chip">
-                        {tip}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {!loading && results.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between mb-5">
-                  <div>
-                    <span className="font-serif text-lg text-parchment">
-                      {results.length} Matches Found
-                    </span>
-                    <p className="text-xs mt-0.5 text-muted">
-                      From {candidatesConsidered} profiles analyzed
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-600/10 border border-green-500/20">
-                    <span className="text-xs font-medium text-green-400">AI Analysis Complete</span>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  {results.map((match, i) => (
-                    <MatchCard key={match.profile_id} match={match} rank={i + 1} />
-                  ))}
-                </div>
-              </div>
-            )}
-            {loading && submitted && results.length > 0 && (
-              <div className="mt-4">
-                <span className="trust-chip animate-pulse">Refreshing match results...</span>
-              </div>
-            )}
-
-            {!loading && submitted && results.length === 0 && !error && (
-              <div className="text-center py-16 text-muted">
-                <div className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center bg-gold/10 border border-gold/20">
-                  <span className="text-xs uppercase tracking-wider text-gold-500">Empty</span>
-                </div>
-                <p className="font-serif text-xl mb-2 text-parchment">No matches found</p>
-                <p className="text-sm mb-4">Try broadening your search criteria and run the match again.</p>
-              </div>
-            )}
-          </div>
-        </div>
+  /* ── Loading ── */
+  if (status === 'loading') return (
+    <div className="pt-16 min-h-screen flex flex-col items-center justify-center gap-6 px-4">
+      <div className="w-16 h-16 rounded-full border-[3px] animate-spin-slow"
+        style={{ borderColor: 'var(--stone)', borderTopColor: 'var(--rose)' }} />
+      <div className="text-center">
+        <h2 className="font-serif text-2xl mb-2">Analyzing Compatibility…</h2>
+        <p className="text-muted text-sm">Our AI is finding your best matches based on your preferences</p>
       </div>
     </div>
   )
-}
 
-function MatchCard({ match, rank }: { match: any; rank: number }) {
-  const score = match.score ?? 0
-  const scoreStyle =
-    score >= 80
-      ? { color: '#4ade80', bg: 'rgba(34,197,94,0.1)', border: 'rgba(34,197,94,0.25)', label: 'Excellent' }
-      : score >= 60
-      ? { color: '#d4a757', bg: 'rgba(212,167,87,0.1)', border: 'rgba(212,167,87,0.25)', label: 'Good' }
-      : { color: 'rgba(200,150,100,0.8)', bg: 'rgba(180,100,40,0.08)', border: 'rgba(180,100,40,0.2)', label: 'Fair' }
+  /* ── Error ── */
+  if (status === 'error') return (
+    <div className="pt-16 min-h-screen flex flex-col items-center justify-center gap-6 px-4 text-center">
+      <div className="text-5xl">⚠️</div>
+      <h2 className="font-serif text-2xl">Match Unavailable</h2>
+      <p className="text-muted text-sm max-w-sm">{errorMsg}</p>
+      <button className="btn-primary px-8 py-3" onClick={reset}>Try Again</button>
+    </div>
+  )
 
-  const profileDetails = [
-    match.age && `${match.age}y`,
-    match.city,
-    match.education,
-  ].filter(Boolean).join(' • ')
+  /* ── Results ── */
+  if (status === 'results') return (
+    <div className="pt-20">
+      <div className="app-container py-8">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-4 chip chip-rose text-sm">
+            ✦ AI Match Complete
+          </div>
+          <h1 className="font-serif text-3xl md:text-4xl mb-2">Your Top Matches</h1>
+          <p className="text-muted text-sm">
+            Found {results.length} compatible profiles from {considered} candidates considered
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 mb-10">
+          {results.map((m, i) => (
+            <div key={m.profile_id} className="relative">
+              {i === 0 && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10 btn-primary text-xs px-3 py-1 rounded-full whitespace-nowrap">
+                  Best Match
+                </div>
+              )}
+              <ProfileCard
+                profile={toSummary(m)}
+                rationale={m.reasoning ?? undefined}
+              />
+            </div>
+          ))}
+        </div>
+
+        <div className="text-center">
+          <button className="btn-ghost px-8 py-3" onClick={reset}>Start New Search</button>
+        </div>
+      </div>
+      <div className="h-16 md:h-0" />
+    </div>
+  )
+
+  /* ── Question ── */
+  const q = STEPS[step]
+  const progress = (step / STEPS.length) * 100
 
   return (
-    <div className="group card block rounded-2xl p-5 transition-all hover:scale-[1.01]">
-      <div className="flex items-start gap-4">
-        <div className="shrink-0 w-20 h-24 rounded-xl overflow-hidden">
-          <ProfilePhoto
-            photoUrl={match.photo_url}
-            name={match.name}
-            gender={match.gender}
-            className="w-full h-full"
-          />
+    <div className="pt-16 min-h-screen flex flex-col items-center justify-center px-4 py-24">
+      {/* Progress */}
+      <div className="w-full max-w-lg mb-10">
+        <div className="flex justify-between mb-2">
+          <span className="text-xs text-muted font-medium">Step {step + 1} of {STEPS.length}</span>
+          <span className="text-xs text-muted">AI Match Setup</span>
+        </div>
+        <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--stone)' }}>
+          <div className="h-full rounded-full transition-all duration-400"
+            style={{ width: `${progress}%`, background: 'var(--rose)' }} />
+        </div>
+      </div>
+
+      {/* Question card */}
+      <div className="w-full max-w-lg text-center">
+        <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-6"
+          style={{ background: 'var(--rose-pale)' }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" style={{ color: 'var(--rose)' }}>
+            <path d="M12 3v3m0 12v3m9-9h-3M6 12H3m14.25-6.25-2.12 2.12M8.87 15.13l-2.12 2.12m0-14.25 2.12 2.12m5.26 5.26 2.12 2.12" />
+          </svg>
         </div>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-serif font-semibold text-base text-parchment">
-                  {match.name || 'Profile #' + match.reg_no?.slice(-6) || 'Anonymous'}
-                </h3>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-gold/10 border border-gold/30 text-gold-500">
-                  #{rank}
-                </span>
-              </div>
-              <p className="text-xs mt-1 text-muted">
-                Reg: {match.reg_no || 'N/A'}
-              </p>
-              {profileDetails && (
-                <p className="text-xs mt-1 text-muted">
-                  {profileDetails}
-                </p>
-              )}
-            </div>
-            <div className="flex flex-col items-end gap-2">
-              <div 
-                className="shrink-0 w-12 h-14 rounded-lg flex flex-col items-center justify-center"
-                style={{ background: scoreStyle.bg, border: `1px solid ${scoreStyle.border}` }}
+        <h2 className="font-serif text-2xl md:text-3xl mb-8">{q.label}</h2>
+
+        <div className="flex flex-col gap-3">
+          {q.options.map(opt => {
+            const selected = answers[q.key] === opt
+            return (
+              <button
+                key={opt}
+                onClick={() => handleAnswer(q.key, opt)}
+                className="flex items-center justify-between px-5 py-4 rounded-xl text-left text-sm font-medium transition-all"
+                style={{
+                  background: selected ? 'var(--rose-pale)' : '#fff',
+                  border: selected ? '2px solid var(--rose)' : '1.5px solid var(--stone)',
+                  color: selected ? 'var(--rose-dark)' : 'var(--charcoal)',
+                  fontWeight: selected ? 600 : 400,
+                  boxShadow: selected ? '0 2px 12px oklch(55% 0.18 10 / 0.12)' : 'none',
+                }}
               >
-                <span className="text-lg font-bold font-serif" style={{ color: scoreStyle.color }}>
-                  {score}
-                </span>
-                <span className="text-[7px] uppercase tracking-wider" style={{ color: scoreStyle.color }}>
-                  {scoreStyle.label}
-                </span>
-              </div>
-            </div>
-          </div>
-          <p className="text-sm mt-2 leading-relaxed text-muted">
-            {match.reasoning || 'A compatible profile matching your preferences.'}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Link href={`/profile/${match.profile_id}`} className="btn-primary">View Profile</Link>
-            <Link href={`/profile/${match.profile_id}?intent=save`} className="btn-secondary">Save Match</Link>
-            <Link href={`/profile/${match.profile_id}?intent=intro`} className="btn-service">Request Intro</Link>
-          </div>
+                {opt}
+                {selected && (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                )}
+              </button>
+            )
+          })}
         </div>
+
+        {step > 0 && (
+          <button onClick={() => setStep(s => s - 1)}
+            className="mt-6 text-sm text-muted hover:text-charcoal transition-colors">
+            ← Back
+          </button>
+        )}
       </div>
     </div>
   )
